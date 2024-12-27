@@ -5,13 +5,14 @@ module GraphFunctions
     , Graph(..)
     , NodeGen
     , matchGraph
-    , singleChar_graph
-    , anyChar_graph
+    , singleCharGraph
+    , anyCharGraph
     , orGraphs
     , kleeneStar
     , plusGraph
     , concatGraphs
-    , orChar_graph
+    , concatGraphsl
+    , orCharGraph
     ) where
         
 import Control.Monad.State
@@ -21,11 +22,16 @@ import qualified Data.Set as Set
 
 --Representa los nodos del grafo del automata, el nombre es solo para identificarlos
 --si estuviera en un lenguaje no funcional podria usar punteros
-data Node = Node {name :: String} deriving (Eq,Show,Ord)
+newtype Node = Node {name :: String} deriving (Eq,Show,Ord)
 
 --Las transiciones entre nodos que lleva cada regla, Epsilon es una transicion especial asi
 --que se maneja de forma separada
-data Matcher = Matcher (Char->Bool) | Epsilon
+data Matcher = Matcher (Char->Bool) String | Epsilon
+
+instance Show Matcher where
+    show (Matcher _ s) = s
+    show _ = "Epsilon"
+    
 
 data Rule = Rule {initial :: Node, matcher :: Matcher, ending :: Node} 
 
@@ -37,15 +43,15 @@ type NodeGen = State Int
 --Identifica si una transicion es de tipo Epsilon
 isEpsilon :: Rule -> Bool
 isEpsilon (Rule _ Epsilon _) = True
-isEpsilon (Rule _ _ _) = False
+isEpsilon (Rule {}) = False
 
 --Entrega una transicion que solo acepta el caracter entregado
-char_matcher :: Char -> Matcher
-char_matcher c = Matcher (\x -> x == c)
+charMatcher :: Char -> Matcher
+charMatcher c = Matcher (==c) "c"
 
 --Entrega una transicion que acepta cualquier caracter de la lista
-or_matcher :: [Char] -> Matcher
-or_matcher chars = Matcher (\x -> x `elem` chars)  
+orMatcher :: [Char] -> Matcher
+orMatcher chars = Matcher (`elem` chars) chars 
 
 --Importantisima funcion, toma el contador, crea un nodo y sube el contador
 makeNode :: String -> NodeGen Node
@@ -57,50 +63,50 @@ makeNode prefix = do
 --Las transiciones epsilon son siempre falsas, ya que esta funcion se usa al
 --probar caracteres con transiciones que consumen un caracter, de este modo
 --las transiciones epsilon nunca consumen un caracter
-match_rule :: Rule -> Char -> Bool
-match_rule (Rule _ Epsilon _) _ = False
-match_rule (Rule _ (Matcher f) _) c = f c
+matchRule :: Rule -> Char -> Bool
+matchRule (Rule _ Epsilon _) _ = False
+matchRule (Rule _ (Matcher f _) _) c = f c
 
 --Crea una regla que consume un caracter cualquiera, lo acepta siempre
-any_char :: NodeGen Rule
-any_char = do
+anyChar :: NodeGen Rule
+anyChar = do
     node1 <- makeNode "anyNode start"
     node2 <- makeNode "anyNode end"
-    return $ Rule node1 (Matcher (\_ -> True)) node2
+    return $ Rule node1 (Matcher (const True) ".") node2
 
 --Crea una regla que solo acepta un caracter, consumiendolo
-single_char :: Char -> NodeGen Rule
-single_char c = do
+singleChar :: Char -> NodeGen Rule
+singleChar c = do
     node1 <- makeNode [c]
     node2 <- makeNode [c]
-    return $ Rule node1 (char_matcher c) node2
+    return $ Rule node1 (charMatcher c) node2
 
 --Crea una regla que acepta cualquier caracter de una lista
-or_char :: [Char] -> NodeGen Rule
-or_char chars = do
-    node1 <- makeNode $ intersperse '|' (chars) ++ "start"
-    node2 <- makeNode $ intersperse '|' (chars) ++ "end"
-    return $ Rule node1 (or_matcher chars) node2
+orChar :: [Char] -> NodeGen Rule
+orChar chars = do
+    node1 <- makeNode $ intersperse '|' chars ++ "start"
+    node2 <- makeNode $ intersperse '|' chars ++ "end"
+    return $ Rule node1 (orMatcher chars) node2
 
 --Crea un grafo simple que acepta solo un caracter
-singleChar_graph :: Char -> NodeGen Graph
-singleChar_graph c = do
-    rule <- single_char c
+singleCharGraph :: Char -> NodeGen Graph
+singleCharGraph c = do
+    rule <- singleChar c
     let node1 = initial rule
         node2 = ending rule
     return $ Graph {start = node1, end = node2, label = [c], rules = [rule]}
 
-orChar_graph :: [Char] -> NodeGen Graph
-orChar_graph chars = do
-    rule <- or_char chars
+orCharGraph :: [Char] -> NodeGen Graph
+orCharGraph chars = do
+    rule <- orChar chars
     let node1 = initial rule
         node2 = ending rule
     return $ Graph {start = node1, end = node2, label = intersperse '|' chars, rules = [rule]}
 
 --Crea un grafo simple que acepta cualquier caracter
-anyChar_graph :: NodeGen Graph
-anyChar_graph = do
-    rule <- any_char
+anyCharGraph :: NodeGen Graph
+anyCharGraph = do
+    rule <- anyChar
     let node1 = initial rule
         node2 = ending rule
     return $ Graph {start = node1, end = node2, label = ".", rules = [rule]}
@@ -138,21 +144,23 @@ plusGraph graph = do
 --Toma una lista de grafos, y conecta el final de uno con el inicio del otro, aceptando solo palabras
 --que pasen todos los grafos
 --ej: g0 acepta "a", g1 acepta "b, concatGraphs [g0,g1] solo acepta "ab"
-concatGraphs :: [Graph] -> NodeGen Graph
-concatGraphs graphs = do
+concatGraphsl :: [Graph] -> NodeGen Graph
+concatGraphsl graphs = do
     let newLabel = concatMap label graphs
         newRules = zipWith (\graph1 graph2 -> Rule (end graph1) Epsilon (start graph2)) graphs (tail graphs)
-        oldRules = concat $ map rules graphs
-    return $ Graph {start = (start $ head graphs), end = (end $ last graphs), label = newLabel, rules = newRules ++ oldRules}
+        oldRules = concatMap rules graphs
+    return $ Graph {start = start $ head graphs, end = end $ last graphs, label = newLabel, rules = newRules ++ oldRules}
 
+concatGraphs :: Graph -> Graph -> NodeGen Graph
+concatGraphs g1 g2 = concatGraphsl [g1,g2]
 --Toma una lista de grafos y devuelve uno que acepta cualquier palabra que pase al menos uno de los grafos
 orGraphs :: [Graph] -> NodeGen Graph
 orGraphs graphs = do
-    let newLabel = concat $ intersperse "|" $ map label graphs
+    let newLabel = intercalate "|" $ map label graphs
     node1 <- makeNode $ newLabel ++ " start"
     node2 <- makeNode $ newLabel ++ " end"
-    let newRules = map (\graph -> Rule node1 Epsilon (start graph)) graphs ++ map (\graph -> Rule (end graph) Epsilon node2) graphs
-        oldRules = concat $ map rules graphs
+    let newRules = map (Rule node1 Epsilon . start) graphs ++ map (\graph -> Rule (end graph) Epsilon node2) graphs
+        oldRules = concatMap rules graphs
     return $ Graph {start = node1, end = node2, label = newLabel, rules = newRules ++ oldRules}  
 
 --Funcion auxiliar, dado un nodo en un grafo, devuelve todos los nodos alcanzables tras tomar todas las transiciones epsilon posibles
@@ -164,7 +172,7 @@ followEpsilons graph node =
 
 --Devuelve todas las reglas que inicien en algun nodo de nuestro conjunto y acepten el caracter dado
 matchingRules :: Graph -> Set.Set Node -> Char -> [Rule]
-matchingRules graph nodeSet c = filter (\x -> Set.member (initial x) nodeSet && match_rule x c) (rules graph)
+matchingRules graph nodeSet c = filter (\x -> Set.member (initial x) nodeSet && matchRule x c) (rules graph)
 
 --Funcion principal del programa, dada una palabra y un grafo, nos dice si la palabra es aceptada por el grafo
 matchGraph :: Graph -> String -> Bool
