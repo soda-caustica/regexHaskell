@@ -4,8 +4,8 @@ module ParserThing
     , Parser(..)
     ) where
 
-
 import Control.Applicative
+
 import GraphFunctions
 
 newtype Parser a = Parser {parse :: String -> Maybe (a,String) }
@@ -50,27 +50,16 @@ char c = Parser func
 chars :: [Char] -> Parser Char
 chars = foldr ((<|>).char) empty
 
-string :: String -> Parser String
-string = mapM char
-
-space :: Parser Char
-space = char ' '
-
-ss :: Parser String
-ss = many $ char ' '
-
 -- EMPIEZA LO DE VERDAD, DEFINAMOS NUESTROS TIPOS
 
 alphabet :: [Char]
 alphabet = ['0'..'9'] ++ ['a'..'z'] ++ ['A'..'Z']
 
 type Character = Char
-
 character :: Parser Character
 character = chars alphabet
 
 data Modifier = Kleene | Plus
-
 modifier :: Parser Modifier
 modifier = fmap f (char '*' <|> char '+')
     where f '*' = Kleene
@@ -78,7 +67,6 @@ modifier = fmap f (char '*' <|> char '+')
           f _ = error "hate hls warnings"
 
 data Item = Item Character | ItemPlus Group
-
 item :: Parser Item
 item = Item <$> character <|> ItemPlus <$> group
 
@@ -87,17 +75,14 @@ group :: Parser Group
 group = Group <$> (char '(' *> expression <* char ')')
 
 data Term = TermPlus Item Modifier | Term Item
-
 term :: Parser Term
 term = TermPlus <$> item <*> modifier <|> Term <$> item
 
 data Expression = ExpressionPlus Term Expression | Expression Term
-
 expression :: Parser Expression
 expression = ExpressionPlus <$> term <*> expression <|> Expression <$> term
 
 data Start = StartExpression Expression | StartEpsilon
-
 parseRegex :: Parser Start
 parseRegex = StartExpression <$> expression <|> return StartEpsilon
 
@@ -112,7 +97,6 @@ expressionToNFA (ExpressionPlus trm expr) = do
     concatGraphs tg eg
 expressionToNFA (Expression trm) = termToNFA trm
     
-
 termToNFA :: Term -> NodeGen Graph
 termToNFA (TermPlus itm modif) = do
     ig <- itemToNFA itm
@@ -120,7 +104,6 @@ termToNFA (TermPlus itm modif) = do
          Kleene -> kleeneStar ig
          Plus -> plusGraph ig
 termToNFA (Term itm) = itemToNFA itm
-
 
 itemToNFA :: Item -> NodeGen Graph
 itemToNFA (Item c) = singleCharGraph c
