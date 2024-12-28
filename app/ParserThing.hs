@@ -2,6 +2,7 @@ module ParserThing
     ( parseRegex
     , astToNFA
     , Parser(..)
+    , Start ()
     ) where
 
 import Control.Applicative
@@ -88,7 +89,7 @@ parseRegex = StartExpression <$> expression <|> return StartEpsilon
 
 astToNFA :: Start -> NodeGen Graph
 astToNFA (StartExpression expr) = expressionToNFA expr
-astToNFA StartEpsilon = singleCharGraph 'c'
+astToNFA StartEpsilon = epsilonGraph
 
 expressionToNFA :: Expression -> NodeGen Graph
 expressionToNFA (ExpressionPlus trm expr) = do

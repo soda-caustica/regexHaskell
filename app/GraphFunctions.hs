@@ -7,21 +7,15 @@ module GraphFunctions
     , matchGraph
     , singleCharGraph
     , anyCharGraph
-    , orGraphs
     , kleeneStar
     , plusGraph
     , concatGraphs
-    , concatGraphsl
-    , orCharGraph
+    , epsilonGraph
     ) where
         
 import Control.Monad.State
-import Data.List
 import qualified Data.Set as Set
 
-
-
-type Queue = [Node]
 --Representa los nodos del grafo del automata, el nombre es solo para identificarlos
 --si estuviera en un lenguaje no funcional podria usar punteros
 newtype Node = Node {name :: String} deriving (Eq,Show,Ord)
@@ -51,10 +45,6 @@ isEpsilon (Rule {}) = False
 charMatcher :: Char -> Matcher
 charMatcher c = Matcher (==c) [c]
 
---Entrega una transicion que acepta cualquier caracter de la lista
-orMatcher :: [Char] -> Matcher
-orMatcher chars = Matcher (`elem` chars) chars 
-
 --Importantisima funcion, toma el contador, crea un nodo y sube el contador
 makeNode :: String -> NodeGen Node
 makeNode prefix = do
@@ -83,13 +73,6 @@ singleChar c = do
     node2 <- makeNode [c]
     return $ Rule node1 (charMatcher c) node2
 
---Crea una regla que acepta cualquier caracter de una lista
-orChar :: [Char] -> NodeGen Rule
-orChar chars = do
-    node1 <- makeNode $ intersperse '|' chars ++ "start"
-    node2 <- makeNode $ intersperse '|' chars ++ "end"
-    return $ Rule node1 (orMatcher chars) node2
-
 --Crea un grafo simple que acepta solo un caracter
 singleCharGraph :: Char -> NodeGen Graph
 singleCharGraph c = do
@@ -98,13 +81,6 @@ singleCharGraph c = do
         node2 = ending rule
     return $ Graph {start = node1, end = node2, label = [c], rules = [rule]}
 
-orCharGraph :: [Char] -> NodeGen Graph
-orCharGraph chars = do
-    rule <- orChar chars
-    let node1 = initial rule
-        node2 = ending rule
-    return $ Graph {start = node1, end = node2, label = intersperse '|' chars, rules = [rule]}
-
 --Crea un grafo simple que acepta cualquier caracter
 anyCharGraph :: NodeGen Graph
 anyCharGraph = do
@@ -112,6 +88,12 @@ anyCharGraph = do
     let node1 = initial rule
         node2 = ending rule
     return $ Graph {start = node1, end = node2, label = ".", rules = [rule]}
+
+epsilonGraph :: NodeGen Graph
+epsilonGraph = do
+    node1 <- makeNode "epsilonNode"
+    node2 <- makeNode "unreachableNode"
+    return $ Graph {start = node1, end = node2, label = "ε", rules = []}
 
 --Toma un grafo y devuelve otro que acepta 0, 1 o varias veces la palabra del grafo original
 --ej: g0 acepta "ab", kleeneStar g0 aceptaria "", "ababababab", "ab", etc
@@ -155,8 +137,9 @@ concatGraphsl graphs = do
 
 concatGraphs :: Graph -> Graph -> NodeGen Graph
 concatGraphs g1 g2 = concatGraphsl [g1,g2]
+
 --Toma una lista de grafos y devuelve uno que acepta cualquier palabra que pase al menos uno de los grafos
-orGraphs :: [Graph] -> NodeGen Graph
+{-orGraphs :: [Graph] -> NodeGen Graph
 orGraphs graphs = do
     let newLabel = intercalate "|" $ map label graphs
     node1 <- makeNode $ newLabel ++ " start"
@@ -164,6 +147,7 @@ orGraphs graphs = do
     let newRules = map (Rule node1 Epsilon . start) graphs ++ map (\graph -> Rule (end graph) Epsilon node2) graphs
         oldRules = concatMap rules graphs
     return $ Graph {start = node1, end = node2, label = newLabel, rules = newRules ++ oldRules}  
+-}
 
 --Funcion auxiliar, dado un nodo en un grafo, devuelve todos los nodos alcanzables tras tomar todas las transiciones epsilon posibles
 {-followEpsilons :: Graph -> Node -> Set.Set Node
