@@ -20,6 +20,8 @@ import Data.List
 import qualified Data.Set as Set
 
 
+
+type Queue = [Node]
 --Representa los nodos del grafo del automata, el nombre es solo para identificarlos
 --si estuviera en un lenguaje no funcional podria usar punteros
 newtype Node = Node {name :: String} deriving (Eq,Show,Ord)
@@ -47,7 +49,7 @@ isEpsilon (Rule {}) = False
 
 --Entrega una transicion que solo acepta el caracter entregado
 charMatcher :: Char -> Matcher
-charMatcher c = Matcher (==c) "c"
+charMatcher c = Matcher (==c) [c]
 
 --Entrega una transicion que acepta cualquier caracter de la lista
 orMatcher :: [Char] -> Matcher
@@ -164,11 +166,20 @@ orGraphs graphs = do
     return $ Graph {start = node1, end = node2, label = newLabel, rules = newRules ++ oldRules}  
 
 --Funcion auxiliar, dado un nodo en un grafo, devuelve todos los nodos alcanzables tras tomar todas las transiciones epsilon posibles
-followEpsilons :: Graph -> Node -> Set.Set Node
+{-followEpsilons :: Graph -> Node -> Set.Set Node
 followEpsilons graph node = 
     let resolved = Set.singleton node
         graphRules = map (followEpsilons graph . ending) $ filter (\x -> initial x == node && isEpsilon x) (rules graph)
      in foldr Set.union resolved graphRules 
+-}
+followEpsilons :: Graph -> Node -> Set.Set Node
+followEpsilons graph node = f [node] (Set.singleton node)
+    where f [] resolved = resolved
+          f (current:xs) resolved = f newQ newS
+              where p x = not (Set.member (ending x) resolved) && initial x == current && isEpsilon x
+                    rulesList = rules graph
+                    newQ = xs ++ map ending (filter p rulesList)
+                    newS = Set.union resolved (Set.fromList $ map ending $ filter p rulesList)
 
 --Devuelve todas las reglas que inicien en algun nodo de nuestro conjunto y acepten el caracter dado
 matchingRules :: Graph -> Set.Set Node -> Char -> [Rule]
@@ -176,12 +187,9 @@ matchingRules graph nodeSet c = filter (\x -> Set.member (initial x) nodeSet && 
 
 --Funcion principal del programa, dada una palabra y un grafo, nos dice si la palabra es aceptada por el grafo
 matchGraph :: Graph -> String -> Bool
-matchGraph graph word = 
-    let states = followEpsilons graph (start graph)
+matchGraph graph word = Set.member (end graph) (foldl (helperFunction graph) states word)
+    where states = followEpsilons graph (start graph)
         --funcion auxiliar, dada una lista de nodos, sigue todas las reglas que acepten un caracter especifico y devuelve los nodos resultantes
-        helperFunction :: Graph -> Set.Set Node -> Char -> Set.Set Node
-        helperFunction g nodes c = foldl (\x y -> Set.union x $ followEpsilons graph $ ending y) Set.empty (matchingRules g nodes c)
-    -- por cada letra de la palabra seguimos todas las reglas, obteniendo nuestros nuevos nodos a entregar a la siguiente letra
-    -- despues comprobamos si la letra final llega al final de grafo, lo que significaria que nuestra palabra cumple el patron
-    in Set.member (end graph) (foldl (helperFunction graph) states word)
+          helperFunction :: Graph -> Set.Set Node -> Char -> Set.Set Node
+          helperFunction g nodes c = foldl (\x y -> Set.union x $ followEpsilons graph $ ending y) Set.empty (matchingRules g nodes c)
 

@@ -59,7 +59,7 @@ type Character = Char
 character :: Parser Character
 character = chars alphabet
 
-data Modifier = Kleene | Plus
+data Modifier = Kleene | Plus deriving Show
 modifier :: Parser Modifier
 modifier = fmap f (char '*' <|> char '+')
     where f '*' = Kleene
